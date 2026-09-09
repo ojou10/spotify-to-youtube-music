@@ -2,6 +2,7 @@
 
 **Status:** Approved design  
 **Date:** 2026-09-08  
+**Last updated:** 2026-09-09
 **Initial deployment:** Local, single-user application  
 **Potential future deployment:** Downloadable local application and hosted multi-user service
 
@@ -9,13 +10,13 @@
 
 Build a local browser application that copies a public Spotify playlist to YouTube Music. The first target playlist contains approximately 2,500 tracks, so the application must be resumable, preserve the source order and intentional duplicates, and provide efficient review of uncertain matches.
 
-The user pastes a public Spotify playlist URL. The application imports a frozen snapshot of its tracks, searches the YouTube Music catalog, automatically accepts strong matches, and asks the user to resolve uncertain or missing matches. It then either creates a new YouTube Music playlist or appends the resolved sequence to an existing playlist.
+The user connects the Spotify account that owns the public playlist and pastes its URL. The application imports a frozen snapshot of its tracks, searches the YouTube Music catalog, automatically accepts strong matches, and asks the user to resolve uncertain or missing matches. It then either creates a new YouTube Music playlist or appends the resolved sequence to an existing playlist.
 
 The application uses Spotify's official Web API for source data and the unofficial `ytmusicapi` library for YouTube Music search and playlist management. The YouTube connector is isolated so it can be repaired or replaced without changing the matching, persistence, or user-interface layers.
 
 ## 2. Goals
 
-- Transfer one public Spotify playlist at a time to YouTube Music.
+- Transfer one public Spotify playlist owned by the connected Spotify account at a time to YouTube Music.
 - Handle playlists with at least 2,500 source positions.
 - Preserve the source position of every supported item and preserve intentional duplicates.
 - Automatically accept only high-confidence matches.
@@ -35,7 +36,7 @@ The application uses Spotify's official Web API for source data and the unoffici
 - Editing, replacing, or reconciling the pre-existing contents of a destination playlist.
 - Removing duplicates from the Spotify source.
 - Transferring podcast episodes, local Spotify files, or unavailable Spotify items.
-- Supporting private Spotify playlists or Spotify user sign-in.
+- Supporting private Spotify playlists or playlists the connected Spotify user does not own.
 - Guaranteeing uninterrupted compatibility with YouTube Music's private web interface.
 - Mobile-native or desktop-native clients.
 
@@ -46,7 +47,8 @@ The application uses Spotify's official Web API for source data and the unoffici
 - The backend is Python with FastAPI.
 - SQLite is the durable store.
 - The Spotify source playlist is public and is supplied by URL.
-- The app does not require Spotify user login; it uses Spotify application credentials.
+- The app requires Spotify sign-in and verifies that the connected user owns the source playlist.
+- Spotify authentication uses Authorization Code with PKCE so a distributed local client does not embed a Spotify client secret.
 - YouTube Music access uses `ytmusicapi` authentication stored locally.
 - Strong matches are accepted automatically; uncertain matches require review.
 - New destinations may be public or private and default to private.
@@ -109,8 +111,9 @@ Dependencies: application services and repositories, not connector implementatio
 
 Responsibilities:
 
-- Authenticate with Spotify application credentials.
+- Authenticate the playlist owner through Spotify Authorization Code with PKCE and refresh access tokens locally.
 - Parse and validate public Spotify playlist identifiers.
+- Verify that the connected Spotify user owns the playlist and that the playlist is public.
 - Fetch playlist metadata and every page of playlist items.
 - Return normalized source records while preserving original positions.
 - Surface unavailable tracks, local files, episodes, and malformed items explicitly.
@@ -235,8 +238,8 @@ The backend validates every transition. Reloading or closing the browser does no
 
 ## 9. Source Import
 
-1. Parse the Spotify URL and extract a playlist ID.
-2. Fetch and display playlist metadata before job creation.
+1. Require an active Spotify user session, parse the Spotify URL, and extract a playlist ID.
+2. Fetch playlist metadata, verify that the connected user owns it and that it is public, then display the preview before job creation.
 3. On confirmation, create a job and page through every playlist item.
 4. Store each item by original source position in short transactions.
 5. Classify local files, episodes, unavailable tracks, and malformed entries as unsupported with a visible reason.
@@ -346,7 +349,7 @@ Command requests include the last observed job revision. A stale revision return
 
 ## 14. Frontend Flow
 
-1. **Setup:** enter Spotify application credentials, initiate YouTube Music authentication, and run connection checks.
+1. **Setup:** enter the Spotify client ID, complete Spotify PKCE sign-in, initiate YouTube Music authentication, and run connection checks.
 2. **Source:** paste the public Spotify URL and inspect playlist metadata.
 3. **Destination:** create new or choose existing append-only; select visibility for a new destination.
 4. **Matching:** follow progress and counts; pause or cancel safely.
@@ -374,7 +377,7 @@ The application makes no promise about total transfer time because the unofficia
 ## 16. Credential and Data Security
 
 - Bind the backend to loopback only by default.
-- Store Spotify credentials and YouTube Music authentication under the local runtime data directory, outside the repository.
+- Store the Spotify client ID, Spotify PKCE tokens, Google OAuth client values, and YouTube Music authentication under the local runtime data directory, outside the repository.
 - Restrict credential-file access to the current operating-system user where supported.
 - Keep the runtime data directory outside the repository and commit only credential examples containing dummy values.
 - Never include tokens, cookies, authorization headers, or raw authentication responses in logs, database events, API responses, or exports.
@@ -451,6 +454,8 @@ Potential follow-up designs may cover downloadable packaging, hosted accounts, o
 ## 21. External Constraints and References
 
 - Spotify Web API authorization: <https://developer.spotify.com/documentation/web-api/concepts/authorization>
+- Spotify Authorization Code with PKCE: <https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow>
+- Spotify playlist-items endpoint and ownership constraint: <https://developer.spotify.com/documentation/web-api/reference/get-playlists-items>
 - Spotify playlist concepts: <https://developer.spotify.com/documentation/web-api/concepts/playlists>
 - Official YouTube playlist API: <https://developers.google.com/youtube/v3/guides/implementation/playlists>
 - YouTube Data API quota overview: <https://developers.google.com/youtube/v3/getting-started>
