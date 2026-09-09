@@ -1,0 +1,44 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+oauth.json
+browser.json
+credentials*.json
+*token*.json
+*.pem
+*.key
+
+# Runtime data
+data/
+.data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/.venv/
+
+# Node and frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Browser tests
+test-results/
+playwright-report/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
