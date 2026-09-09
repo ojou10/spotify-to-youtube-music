@@ -1,0 +1,1 @@
+"""Connector-neutral domain types."""
