@@ -36,6 +36,9 @@ class JobRepository:
         self.session.flush()
         return self.get(job_id)
 
+    def list_status(self, statuses: set[JobStatus]) -> list[TransferJobRow]:
+        return list(self.session.scalars(select(TransferJobRow).where(TransferJobRow.status.in_([status.value for status in statuses])).order_by(TransferJobRow.created_at)))
+
 
 class SourceItemRepository:
     def __init__(self, session: Session):
@@ -59,6 +62,9 @@ class SourceItemRepository:
     def delete_for_job(self, job_id: UUID | str) -> None:
         self.session.execute(delete(SourceItemRow).where(SourceItemRow.job_id == str(job_id)))
         self.session.flush()
+
+    def get(self, item_id: str) -> SourceItemRow | None:
+        return self.session.get(SourceItemRow, item_id)
 
 
 class EventRepository:

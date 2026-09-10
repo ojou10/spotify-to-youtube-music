@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,10 +17,19 @@ from app.persistence.db import Database
 from app.settings.paths import AppPaths
 from app.settings.secrets import AtomicSecretStore
 from app.spa import mount_frontend
+from app.transfer.worker import TransferWorker
 
 
 def create_app(secret_store: AtomicSecretStore | None = None, database: Database | None = None) -> FastAPI:
-    app = FastAPI(title="Playlist Bridge", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.worker.start()
+        try:
+            yield
+        finally:
+            app.state.worker.stop()
+
+    app = FastAPI(title="Playlist Bridge", version="0.1.0", lifespan=lifespan)
     paths = AppPaths.from_platform()
     store = secret_store or AtomicSecretStore(paths.secrets_file)
     app.state.spotify_auth = SpotifyAuth(store)
@@ -28,6 +38,7 @@ def create_app(secret_store: AtomicSecretStore | None = None, database: Database
     app.state.spotify_connector = SpotifyConnector(app.state.spotify_auth)
     app.state.youtube_auth = YouTubeMusicAuth(store)
     app.state.youtube_connector = YouTubeMusicConnector(app.state.youtube_auth)
+    app.state.worker = TransferWorker(app.state.database, app.state.spotify_connector, app.state.youtube_connector)
     app.include_router(health_router, prefix="/api")
     app.include_router(setup_router, prefix="/api")
     app.include_router(spotify_router, prefix="/api")
