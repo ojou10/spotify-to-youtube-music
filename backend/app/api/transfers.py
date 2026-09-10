@@ -4,9 +4,12 @@ from collections.abc import Iterator
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from app.domain.enums import DestinationMode, Visibility
 from app.domain.models import CreateJob
+from app.persistence.tables import TransferJobRow
+from app.reporting.export import ReportExporter
 from app.transfer.service import TransferService
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
@@ -73,3 +76,32 @@ def transfer_events(job_id: str, request: Request):
             yield f"event: progress\\ndata: {json.dumps(payload)}\\n\\n"
             yield ": heartbeat\\n\\n"
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.get("")
+def list_transfers(request: Request, cursor: str | None = None, limit: int = 25):
+    limit = max(1, min(100, limit))
+    with request.app.state.database.session() as session:
+        rows = list(session.scalars(select(TransferJobRow).order_by(TransferJobRow.created_at.desc()).limit(limit + 1)))
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return {"items": [{"id": row.id, "status": row.status, "revision": row.revision, "source_name": row.source_name, "source_track_count": row.source_track_count, "destination_name": row.destination_name, "counts": row.counts or {}} for row in rows], "next_cursor": rows[-1].id if has_more and rows else None}
+
+
+@router.get("/{job_id}")
+def transfer_detail(job_id: str, request: Request):
+    with request.app.state.database.session() as session:
+        job = session.get(TransferJobRow, job_id)
+        if not job:
+            return {"error": "not_found"}
+        return {"id": job.id, "status": job.status, "revision": job.revision, "source_name": job.source_name, "source_url": job.source_url, "destination_name": job.destination_name, "destination_playlist_id": job.destination_playlist_id, "counts": job.counts or {}, "last_error": job.last_error_summary, "report_formats": ["json", "csv"]}
+
+
+@router.get("/{job_id}/exports/{format}")
+def transfer_export(job_id: str, format: str, request: Request):
+    exporter = ReportExporter(request.app.state.database)
+    if format == "json":
+        return StreamingResponse(exporter.build_json_report(job_id), media_type="application/json", headers={"Content-Disposition": f'attachment; filename="playlist-bridge-{job_id}.json"'})
+    if format == "csv":
+        return StreamingResponse(exporter.build_csv_report(job_id), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="playlist-bridge-{job_id}.csv"'})
+    return {"error": "unsupported_format"}
