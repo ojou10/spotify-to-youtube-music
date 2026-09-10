@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.enums import JobStatus
@@ -31,6 +31,11 @@ class JobRepository:
         self.session.flush()
         return self.get(job_id)
 
+    def update(self, job_id: UUID | str, **values) -> TransferJobRow:
+        self.session.execute(update(TransferJobRow).where(TransferJobRow.id == str(job_id)).values(**values))
+        self.session.flush()
+        return self.get(job_id)
+
 
 class SourceItemRepository:
     def __init__(self, session: Session):
@@ -50,6 +55,10 @@ class SourceItemRepository:
                 .order_by(SourceItemRow.source_position)
             )
         )
+
+    def delete_for_job(self, job_id: UUID | str) -> None:
+        self.session.execute(delete(SourceItemRow).where(SourceItemRow.job_id == str(job_id)))
+        self.session.flush()
 
 
 class EventRepository:
