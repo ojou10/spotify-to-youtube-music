@@ -7,11 +7,12 @@ from sqlalchemy import select
 
 from app.connectors.base import ValidationFailure
 from app.connectors.spotify import SpotifyConnector, SpotifyPlaylistPage, parse_spotify_playlist_id
-from app.domain.enums import JobStatus, SupportStatus
+from app.domain.enums import DestinationMode, JobStatus, MatchStatus, SupportStatus
 from app.domain.models import CreateJob
 from app.persistence.db import Database
 from app.persistence.repositories import RepositorySet
-from app.persistence.tables import MatchCandidateRow, SourceItemRow
+from app.persistence.tables import AppendBatchRow, MatchCandidateRow, SourceItemRow
+from app.transfer.reconcile import reconcile_prefix
 
 VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
@@ -152,3 +153,66 @@ class TransferService:
         if not match:
             raise ValidationFailure("Enter a single YouTube Music video link")
         return match.group(1)
+
+    def prepare_destination(self, job_id: UUID | str):
+        with self.database.session() as session:
+            repos = RepositorySet(session)
+            job = repos.jobs.get(job_id)
+            if not job:
+                raise ValidationFailure("Transfer job not found")
+            if job.destination_mode == DestinationMode.CREATE.value:
+                destination = self.youtube.create_playlist(job.destination_name or job.source_name or "Playlist Bridge", "Transferred from Spotify", job.destination_visibility or "private")
+                job = repos.jobs.update(job.id, destination_playlist_id=destination.playlist_id, destination_base_length=0)
+            elif job.destination_mode == DestinationMode.APPEND.value:
+                if not job.destination_playlist_id:
+                    raise ValidationFailure("Choose an existing destination playlist")
+                playlist = self.youtube.get_playlist(job.destination_playlist_id, limit=None)
+                job = repos.jobs.update(job.id, destination_base_length=len(playlist.get("tracks") or []))
+            else:
+                raise ValidationFailure("Choose a destination mode")
+            return job
+
+    def plan_batches(self, job_id: UUID | str, batch_size: int = 50):
+        with self.database.session() as session:
+            repos = RepositorySet(session)
+            rows = repos.items.list(job_id)
+            unresolved = [row for row in rows if row.support_status == SupportStatus.SUPPORTED.value and row.match_status not in {MatchStatus.AUTO_ACCEPTED.value, MatchStatus.MANUAL_ACCEPTED.value, MatchStatus.SKIPPED.value}]
+            if unresolved:
+                raise ValidationFailure("Resolve every supported item before transfer")
+            selected = [row.selected_video_id for row in rows if row.support_status == SupportStatus.SUPPORTED.value and row.match_status != MatchStatus.SKIPPED.value and row.selected_video_id]
+            for index, start in enumerate(range(0, len(selected), batch_size)):
+                values = selected[start : start + batch_size]
+                session.add(AppendBatchRow(job_id=str(job_id), batch_index=index, start_offset=start, end_offset=start + len(values), video_ids=values))
+            return selected
+
+    def transfer(self, job_id: UUID | str):
+        job = self.prepare_destination(job_id)
+        self.plan_batches(job.id)
+        with self.database.session() as session:
+            repos = RepositorySet(session)
+            job = repos.jobs.transition(job.id, job.revision, JobStatus.PREPARING_DESTINATION)
+            job = repos.jobs.transition(job.id, job.revision, JobStatus.TRANSFERRING)
+            batches = list(session.scalars(select(AppendBatchRow).where(AppendBatchRow.job_id == str(job.id)).order_by(AppendBatchRow.batch_index)))
+        for batch in batches:
+            try:
+                self.youtube.append_video_ids(job.destination_playlist_id, batch.video_ids)
+            except Exception:
+                with self.database.session() as session:
+                    repos = RepositorySet(session)
+                    current = repos.jobs.get(job.id)
+                    repos.jobs.update(current.id, status=JobStatus.PAUSED.value, revision=current.revision + 1, last_error_code="youtube_append_failed", last_error_summary="YouTube Music rejected an ordered batch")
+                raise
+            with self.database.session() as session:
+                repos = RepositorySet(session)
+                row = session.get(AppendBatchRow, batch.id)
+                row.state = "confirmed"
+                current = repos.jobs.get(job.id)
+                repos.jobs.update(current.id, write_cursor=batch.end_offset)
+        with self.database.session() as session:
+            repos = RepositorySet(session)
+            current = repos.jobs.get(job.id)
+            return repos.jobs.transition(current.id, current.revision, JobStatus.COMPLETED)
+
+    @staticmethod
+    def reconcile_destination(base_length: int, observed_tail: list[str], planned: list[str]) -> int:
+        return reconcile_prefix(base_length, observed_tail, planned)

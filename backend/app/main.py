@@ -8,6 +8,7 @@ from app.api.health import router as health_router
 from app.api.setup import router as setup_router
 from app.api.spotify import router as spotify_router
 from app.api.transfers import router as transfers_router
+from app.api.youtube import router as youtube_router
 from app.connectors.base import ConnectorError
 from app.connectors.spotify import SpotifyConnector
 from app.connectors.spotify_auth import SpotifyAuth
@@ -43,6 +44,7 @@ def create_app(secret_store: AtomicSecretStore | None = None, database: Database
     app.include_router(setup_router, prefix="/api")
     app.include_router(spotify_router, prefix="/api")
     app.include_router(transfers_router, prefix="/api")
+    app.include_router(youtube_router, prefix="/api")
     app.add_exception_handler(ConnectorError, connector_error_response)
     mount_frontend(app, Path(__file__).resolve().parents[2] / "frontend" / "dist")
     return app
