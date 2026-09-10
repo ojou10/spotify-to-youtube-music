@@ -1,0 +1,14 @@
+[
+  {
+    "name": "exact_studio_track",
+    "source": {"title": "Song", "artists": ["Artist"], "album": "Album", "duration_ms": 200000},
+    "candidates": [{"video_id": "studio", "title": "Song", "artists": ["Artist"], "album": "Album", "duration_ms": 200000, "result_type": "song"}],
+    "expected": {"classification": "auto_accepted"}
+  },
+  {
+    "name": "reject_unrequested_live_version",
+    "source": {"title": "Song", "artists": ["Artist"], "album": "Album", "duration_ms": 200000},
+    "candidates": [{"video_id": "live", "title": "Song (Live)", "artists": ["Artist"], "album": "Album", "duration_ms": 201000, "result_type": "song"}],
+    "expected": {"classification": "review_required", "penalty": 25}
+  }
+]

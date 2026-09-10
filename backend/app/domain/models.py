@@ -57,12 +57,13 @@ class ScoreBreakdown:
     result_type: float
     version: float
     penalties: tuple[str, ...] = ()
+    penalty_points: float = 0.0
 
     @property
     def total(self) -> float:
         return max(
             0.0,
-            min(100.0, self.title + self.artists + self.duration + self.album + self.result_type + self.version),
+            min(100.0, self.title + self.artists + self.duration + self.album + self.result_type + self.version - self.penalty_points),
         )
 
 
