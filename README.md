@@ -1,56 +1,36 @@
 # Playlist Bridge
 
-Playlist Bridge is a planned local web application for transferring an owned public Spotify playlist to YouTube Music. It is designed for very large playlists, explainable song matching, manual review of uncertain results, exact ordering, intentional duplicates, and interruption-safe resume.
+Playlist Bridge is a local, resumable app for moving an owned public Spotify playlist to YouTube Music. It is implemented through the matching, review, recovery, destination, reporting, and browser flows; the final controlled small-playlist acceptance remains a manual gate before a large transfer.
 
-> **Project status:** Product design and implementation planning are complete. Application code has not started.
+## What it does
 
-## Planned workflow
+- Spotify Authorization Code + PKCE sign-in for the account that owns the source playlist.
+- Public playlist inspection and frozen, ordered source import, including intentional duplicates.
+- Explainable YouTube Music matching with automatic acceptance for strong matches and a review queue for uncertain results.
+- New private/public destinations or append-only writes to an owned playlist.
+- Resumable jobs, prefix reconciliation after uncertain writes, history, and CSV/JSON reports.
 
-1. Connect the Spotify account that owns the public source playlist.
-2. Paste the Spotify playlist URL.
-3. Match tracks against the YouTube Music catalog.
-4. Review only uncertain or missing matches.
-5. Create a new public or private YouTube Music playlist, or append to an existing owned playlist.
-6. Resume safely after interruption and export a complete result report.
+YouTube Music uses the unofficial `ytmusicapi` library. Google or YouTube Music can change that private interface without notice; the connector is isolated for replacement.
 
-## Architecture
+## Quick start
 
-- React and TypeScript browser interface
-- FastAPI Python backend bound to the local computer
-- SQLite job, review, and recovery state
-- Official Spotify Web API with Authorization Code and PKCE
-- Isolated, version-pinned ytmusicapi integration for YouTube Music
+Prerequisites: Python 3.12+, Node.js 22+, and provider OAuth clients configured locally. See [setup.md](docs/setup.md).
 
-ytmusicapi is unofficial and emulates the YouTube Music web client. Google may change that private interface without notice. The connector is intentionally isolated so compatibility updates do not affect the rest of the application.
+```powershell
+python -m venv backend/.venv
+backend/.venv/Scripts/python -m pip install -e "backend[dev]"
+npm --prefix frontend install
+npm run dev
+```
 
-## Privacy and repository safety
+Open the local frontend at `http://127.0.0.1:5173`. Runtime secrets and SQLite data live in the operating-system application-data directory, never in this repository or browser storage.
 
-Playlist Bridge is local-only in its first version. OAuth material, cookies, tokens, runtime databases, and transfer history must remain in the operating system's per-user application-data directory. They must never be committed, logged, placed in reports, or returned to the browser as raw values.
+Run checks with `npm run verify`. The full architecture is documented in [architecture.md](docs/architecture.md), and the small controlled acceptance procedure is in [test-playlist.md](docs/test-playlist.md).
 
-This repository intentionally ignores common credential and runtime filenames. Before every public release, tracked files will be scanned for secrets and generated data. If a credential is ever committed, revoke it immediately; deleting it from a later commit is not sufficient.
+## Scope and safety
 
-## Documentation
+Version one is single-user and local. Hosted accounts, ongoing synchronization, reverse transfers, and private Spotify sources are out of scope. Do not begin a 2,500-track transfer until the controlled acceptance playlist passes.
 
-- [Approved product design](docs/superpowers/specs/2026-09-08-spotify-to-youtube-music-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-09-09-playlist-transfer-app.md)
-- [Documentation index](docs/README.md)
-- [Security policy](SECURITY.md)
-- [Contributing guide](CONTRIBUTING.md)
+See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the approved [design](docs/superpowers/specs/2026-09-08-spotify-to-youtube-music-design.md).
 
-## Development
-
-Implementation will follow the checked, task-by-task plan. Each task starts with a failing test, ends with its focused and affected suites passing, receives a secret scan and diff review, and lands as a separate commit.
-
-The first executable development instructions will be added with Task 1. Until then, the repository is a transparent planning artifact.
-
-## Scope
-
-Version one is single-user and local. Hosted accounts, ongoing synchronization, private Spotify sources, reverse transfers, and mobile or desktop-native clients require separate designs.
-
-## Disclaimer
-
-This project is not affiliated with, endorsed by, or sponsored by Spotify, Google, YouTube, or YouTube Music. Spotify and YouTube Music are trademarks of their respective owners.
-
-## License
-
-[MIT](LICENSE)
+This project is not affiliated with Spotify, Google, YouTube, or YouTube Music.
