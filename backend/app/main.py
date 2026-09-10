@@ -10,6 +10,8 @@ from app.api.transfers import router as transfers_router
 from app.connectors.base import ConnectorError
 from app.connectors.spotify import SpotifyConnector
 from app.connectors.spotify_auth import SpotifyAuth
+from app.connectors.ytmusic import YouTubeMusicConnector
+from app.connectors.ytmusic_auth import YouTubeMusicAuth
 from app.persistence.db import Database
 from app.settings.paths import AppPaths
 from app.settings.secrets import AtomicSecretStore
@@ -24,6 +26,8 @@ def create_app(secret_store: AtomicSecretStore | None = None, database: Database
     app.state.database = database or Database(paths.root / "playlist_bridge.sqlite3")
     app.state.database.create_all()
     app.state.spotify_connector = SpotifyConnector(app.state.spotify_auth)
+    app.state.youtube_auth = YouTubeMusicAuth(store)
+    app.state.youtube_connector = YouTubeMusicConnector(app.state.youtube_auth)
     app.include_router(health_router, prefix="/api")
     app.include_router(setup_router, prefix="/api")
     app.include_router(spotify_router, prefix="/api")

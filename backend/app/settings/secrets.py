@@ -36,3 +36,9 @@ class AtomicSecretStore:
         data.pop(key, None)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data), encoding="utf-8")
+
+    def keys(self, prefix: str = "") -> list[str]:
+        if not self.path.exists():
+            return []
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        return [key for key in data if key.startswith(prefix)]
